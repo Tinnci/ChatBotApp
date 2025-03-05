@@ -83,26 +83,37 @@ jobs:
         cd ..
         git clone --recursive https://github.com/UbiquitousLearning/mllm.git
         cd mllm
-        mkdir -p build && cd build
         
         echo "::group::MLLM Build Log"
-        cmake .. -DCMAKE_BUILD_TYPE=Release \
-                -DMLLM_BUILD_ANDROID=ON \
-                -DANDROID_ABI=arm64-v8a \
-                -DANDROID_PLATFORM=android-29 \
-                -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake
-        cmake --build . --config Release -j$(nproc)
+        # 使用官方构建脚本
+        cd scripts
+        # 修改build_android_qnn.sh的权限
+        chmod +x build_android_qnn.sh
+        # 设置环境变量
+        export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+        export DEBUG=false
+        export TEST=false
+        # 执行构建脚本
+        ./build_android_qnn.sh
         echo "::endgroup::"
         
         cd ../..
         
-        # 复制MLLM库
+        # 复制MLLM库并验证
+        echo "::group::Copy and Verify MLLM Libraries"
         mkdir -p ChatBotApp/app/src/main/cpp/libs/arm64-v8a/
-        find mllm/build -name "*.a" -exec cp {} ChatBotApp/app/src/main/cpp/libs/arm64-v8a/ \;
+        # 从bin目录复制库文件
+        find mllm/bin -name "*.a" -exec cp -v {} ChatBotApp/app/src/main/cpp/libs/arm64-v8a/ \;
+        ls -l ChatBotApp/app/src/main/cpp/libs/arm64-v8a/
+        echo "::endgroup::"
+        
+        cd ChatBotApp
         
     - name: Build with Gradle
       run: |
-        ./gradlew assemble${{ github.event.inputs.build_type == 'release' && 'Release' || 'Debug' }}
+        echo "::group::Gradle Build Log"
+        ./gradlew assemble${{ github.event.inputs.build_type == 'release' && 'Release' || 'Debug' }} --info
+        echo "::endgroup::"
       env:
         ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         
