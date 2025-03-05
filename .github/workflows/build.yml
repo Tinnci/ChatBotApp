@@ -98,8 +98,13 @@ jobs:
                 -DARM=ON \
                 -DQUANT=OFF \
                 -DTEST=OFF \
-                -DMLLM_ENABLE_PYTHON=OFF
+                -DMLLM_ENABLE_PYTHON=OFF \
+                -DMLLM_ANDROID_LOG=ON
         
+        # 创建链接脚本
+        echo "INPUT(liblog.so)" > liblog.so.link
+        
+        # 构建
         cmake --build . --config Release
         cd ../..
         
