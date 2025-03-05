@@ -50,7 +50,6 @@ endif()
 # can link libraries from various origins, such as libraries defined in this
 # build script, prebuilt third-party libraries, or Android system libraries.
 target_link_libraries(${CMAKE_PROJECT_NAME}
-    # List libraries link to the target library
     android
-    mllm_lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/libs/${ANDROID_ABI}/libmllm_lib.a
     log)
