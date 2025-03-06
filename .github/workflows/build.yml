@@ -16,6 +16,11 @@ on:
         required: true
         default: false
         type: boolean
+      enable_qnn:
+        description: '是否启用QNN'
+        required: true
+        default: true
+        type: boolean
 
 jobs:
   build:
@@ -71,39 +76,79 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libomp-dev
 
+    - name: Download QNN SDK
+      if: ${{ github.event.inputs.enable_qnn }}
+      run: |
+        # 创建目标目录
+        mkdir -p ${{ github.workspace }}/app/src/main/cpp/qnn_sdk
+        cd ${{ github.workspace }}/app/src/main/cpp/qnn_sdk
+        
+        # 下载QNN SDK
+        echo "正在下载QNN SDK..."
+        curl -L -o qnn_sdk.zip \
+             "https://apigwx-aws.qualcomm.com/qsc/public/v1/api/download/software/tool/qualcomm_neural_processing_sdk_public/2.27.0.240926/Linux/qualcomm_neural_processing_sdk_public.Core.2.27.0.240926.Linux-AnyCPU.zip"
+        
+        # 解压SDK
+        unzip -q qnn_sdk.zip
+        cp -r qairt/2.27.0.240926/* .
+        rm -rf qairt qnn_sdk.zip
+        
+        # 验证目录结构
+        if [ ! -d "lib/aarch64-android" ]; then
+          echo "错误：缺少Android ARM64库文件"
+          exit 1
+        fi
+        
+        # 设置QNN环境变量
+        {
+          echo "QNN_SDK_ROOT=${{ github.workspace }}/app/src/main/cpp/qnn_sdk"
+          echo "QNN_TARGET_ARCH=aarch64-android"
+          echo "QNN_ENABLE_HTP=1"
+          echo "QNN_ENABLE_GPU=1"
+          echo "QNN_ENABLE_CPU=1"
+        } >> $GITHUB_ENV
+
     - name: Setup Native Libraries
       run: |
         # 创建目标目录
         mkdir -p app/src/main/cpp/libs/arm64-v8a/
         
         # 复制QNN相关库
-        cp app/src/main/jniLibs/arm64-v8a/libQnn*.so app/src/main/cpp/libs/arm64-v8a/
+        if [ "${{ github.event.inputs.enable_qnn }}" = "true" ]; then
+          cp app/src/main/jniLibs/arm64-v8a/libQnn*.so app/src/main/cpp/libs/arm64-v8a/
+        fi
         
         # 构建MLLM
         cd ..
         git clone --recursive https://github.com/UbiquitousLearning/mllm.git
         cd mllm
+        mkdir -p build-arm-app && cd build-arm-app
         
         echo "::group::MLLM Build Log"
-        # 使用官方构建脚本
-        cd scripts
-        # 修改build_android_qnn.sh的权限
-        chmod +x build_android_qnn.sh
-        # 设置环境变量
-        export ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
-        export DEBUG=false
-        export TEST=false
-        # 执行构建脚本
-        ./build_android_qnn.sh
+        cmake .. \
+          -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DANDROID_ABI="arm64-v8a" \
+          -DANDROID_NATIVE_API_LEVEL=android-28 \
+          -DNATIVE_LIBRARY_OUTPUT=. \
+          -DNATIVE_INCLUDE_OUTPUT=. \
+          -DARM=ON \
+          -DAPK=ON \
+          -DQNN=${{ github.event.inputs.enable_qnn }} \
+          -DDEBUG=OFF \
+          -DTEST=OFF \
+          -DQUANT=OFF \
+          -DQNN_VALIDATE_NODE=${{ github.event.inputs.enable_qnn }} \
+          -DMLLM_BUILD_XNNPACK_BACKEND=OFF
+        
+        make mllm_lib -j$(nproc)
         echo "::endgroup::"
         
         cd ../..
         
         # 复制MLLM库并验证
         echo "::group::Copy and Verify MLLM Libraries"
-        mkdir -p ChatBotApp/app/src/main/cpp/libs/arm64-v8a/
-        # 从bin目录复制库文件
-        find mllm/bin -name "*.a" -exec cp -v {} ChatBotApp/app/src/main/cpp/libs/arm64-v8a/ \;
+        cp mllm/build-arm-app/libmllm_lib.a ChatBotApp/app/src/main/cpp/libs/arm64-v8a/
         ls -l ChatBotApp/app/src/main/cpp/libs/arm64-v8a/
         echo "::endgroup::"
         
