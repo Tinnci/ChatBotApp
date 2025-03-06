@@ -1,4 +1,4 @@
-name: Android CI
+name: Android CI with QNN
 
 on:
   workflow_dispatch:
