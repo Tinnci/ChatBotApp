@@ -170,12 +170,15 @@ jobs:
       run: |
         # 复制MLLM库并验证
         mkdir -p app/src/main/cpp/libs/arm64-v8a/
-        cp build-arm-app/libmllm_lib.a app/src/main/cpp/libs/arm64-v8a/
+        cp mllm/build-arm-app/libmllm_lib.a app/src/main/cpp/libs/arm64-v8a/  # 修改这里，添加 mllm/ 前缀
         ls -l app/src/main/cpp/libs/arm64-v8a/
 
     - name: Build with Gradle
       run: |
         echo "::group::Gradle Build Log"
+        # 确保在正确的目录中
+        cd ${{ github.workspace }}
+        ls -la  # 调试用，查看当前目录结构
         ./gradlew assemble${{ github.event.inputs.build_type == 'release' && 'Release' || 'Debug' }} --info
         echo "::endgroup::"
       env:
@@ -198,3 +201,13 @@ jobs:
       with:
         name: app-release
         path: app/build/outputs/apk/release/*.apk
+
+    - name: Debug Info
+      run: |
+        echo "当前工作目录: $(pwd)"
+        echo "目录结构:"
+        ls -R
+        echo "MLLM目录:"
+        ls -R mllm
+        echo "QNN SDK目录:"
+        ls -R src/backends/qnn/sdk
